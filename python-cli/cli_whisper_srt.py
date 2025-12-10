@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-import argparse
 import os
-import sys
 import whisper
-
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
 def to_srt_time(seconds: float) -> str:
     hrs = int(seconds // 3600)
@@ -11,7 +10,6 @@ def to_srt_time(seconds: float) -> str:
     secs = int(seconds % 60)
     msec = int((seconds - int(seconds)) * 1000)
     return f"{hrs:02}:{mins:02}:{secs:02},{msec:03}"
-
 
 def save_srt(segments, filepath: str) -> None:
     with open(filepath, "w", encoding="utf-8") as f:
@@ -24,66 +22,46 @@ def save_srt(segments, filepath: str) -> None:
             f.write(f"{start} --> {end}\n")
             f.write(f"{text}\n\n")
 
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Whisper ile video / ses dosyasından SRT altyazı üret"
-    )
-    parser.add_argument("input", help="Video veya ses dosyası (mp4, mkv, wav vs.)")
-    parser.add_argument(
-        "-m",
-        "--model",
-        default="medium",
-        choices=["tiny", "base", "small", "medium", "large"],
-        help="Kullanılacak Whisper modeli (varsayılan: medium)",
-    )
-    parser.add_argument(
-        "-l",
-        "--language",
-        default=None,
-        help="Dil kodu (örn: en, it, tr). Boş bırakılırsa otomatik algılar.",
-    )
-    parser.add_argument(
-        "-t",
-        "--task",
-        default="transcribe",
-        choices=["transcribe", "translate"],
-        help="transcribe: orijinal dilde yaz, translate: İngilizceye çevir.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        help="Çıkış SRT yolu. Boş bırakılırsa input dosya adıyla .srt üretir.",
+def run_whisper():
+    # Dosya seçtir
+    filepath = filedialog.askopenfilename(
+        title="Video veya Ses Dosyası Seç",
+        filetypes=(
+            ("Media Files", "*.mp4 *.mkv *.mp3 *.wav *.flac *.ogg"),
+            ("All Files", "*.*"),
+        ),
     )
 
-    args = parser.parse_args()
+    if not filepath:
+        return
 
-    if not os.path.isfile(args.input):
-        print(f"HATA: Dosya bulunamadı: {args.input}", file=sys.stderr)
-        sys.exit(1)
+    try:
+        messagebox.showinfo("Model", "Whisper modeli yükleniyor (medium)...")
+        model = whisper.load_model("medium")
 
-    print(f"[+] Model yükleniyor: {args.model}")
-    model = whisper.load_model(args.model)
+        messagebox.showinfo("Başladı", "Transkripsiyon başlıyor...")
 
-    print(f"[+] Transkripsiyon başlıyor: {args.input}")
-    result = model.transcribe(
-        args.input,
-        language=args.language,
-        task=args.task,
-        verbose=True,
-        fp16=False,  # GPU yoksa sorun çıkmasın diye
-    )
+        result = model.transcribe(filepath, fp16=False)
 
-    out_path = (
-        args.output
-        if args.output
-        else os.path.splitext(args.input)[0] + ".srt"
-    )
+        out_path = os.path.splitext(filepath)[0] + ".srt"
 
-    print(f"[+] SRT kaydediliyor: {out_path}")
-    save_srt(result["segments"], out_path)
-    print("[+] Bitti.")
+        save_srt(result["segments"], out_path)
 
+        messagebox.showinfo("Bitti", f"SRT oluşturuldu:\n{out_path}")
 
-if __name__ == "__main__":
-    main()
+    except Exception as e:
+        messagebox.showerror("Hata", str(e))
+
+# Basit GUI
+root = tk.Tk()
+root.title("Whisper SRT Üretici")
+
+root.geometry("300x150")
+
+label = tk.Label(root, text="Whisper SRT Oluşturucu", font=("Arial", 14))
+label.pack(pady=15)
+
+button = tk.Button(root, text="Video/Ses Seç ve SRT Üret", command=run_whisper)
+button.pack(pady=10)
+
+root.mainloop()
